@@ -1,0 +1,20 @@
+Package: TVFundSelect
+Type: Package
+Title: Robust Mutual Fund Selection with Time-Varying Coefficients
+Version: 0.1.0
+Authors@R: person("Long", "Feng", email = "flnankai@gmail.com", role = c("aut", "cre"))
+Description: Selects funds with positive average alpha using spatial-sign and
+    least-squares procedures in time-varying and constant-coefficient factor
+    models. Includes local-linear screening, coefficient-constancy tests,
+    fresh Monte Carlo experiments, data-calibrated experiments, rolling
+    investment evaluation and reproducible workflows for the October 24,
+    2026 manuscript 'Robust Mutual Fund Selection with Time-Varying Alphas
+    and Factor Loadings'. Reproduction regenerates data and refits models;
+    it does not substitute archived result tables for computation.
+License: GPL-3
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Imports: stats, splines, parallel, graphics, grDevices, utils, tools
+URL: https://github.com/flnankai/TVFundSelect
+BugReports: https://github.com/flnankai/TVFundSelect/issues
+NeedsCompilation: no

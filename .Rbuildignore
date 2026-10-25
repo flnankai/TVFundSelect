@@ -1,0 +1,13 @@
+^\.git$
+^\.github$
+^\.gitignore$
+^.*\.Rproj$
+^\.Rproj\.user$
+^checks$
+^recomputed$
+^data-private$
+^.*\.tar\.gz$
+^.*\.zip$
+^README\.md$
+^NEWS\.md$
+^CODE_OF_CONDUCT\.md$
