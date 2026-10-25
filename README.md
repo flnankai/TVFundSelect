@@ -51,8 +51,7 @@ TV-LS uses unrestricted residual variance RSS/(T-q-1). CC-LS uses RSS/(T-p-1).
 The local-linear benchmark retains its printed kernel variance formula and
 normal-reference bandwidth; BH is the article's added selection step.
 These are complete implemented comparisons, not claims that each extension
-was already proposed in the cited antecedent articles. The cancelled CS
-comparison is deliberately excluded.
+was already proposed in the cited antecedent articles.
 
 Input validation rejects unidentified designs, nonfinite data, zero residual
 radii and nonconvergent spatial equations. It does not silently ridge-fit,

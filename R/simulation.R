@@ -387,8 +387,8 @@ plot_simulation_results <- function(x, file = NULL, overwrite = FALSE) {
   distributions <- x$config$distributions
   palette <- c("#1B6CA8", "#D1495B", "#3B7A57", "#7A5195", "#D18F00")
   for (k in seq_len(nrow(panels))) {
-    graphics::par(mfrow = c(length(distributions), 2L), mar = c(3.4, 3.8, 2.2, 0.8),
-                  oma = c(1.5, 0, 2.4, 0))
+    graphics::par(mfrow = c(length(distributions), 2L), mar = c(3.9, 4.2, 2.2, 0.8),
+                  mgp = c(2.25, 0.65, 0), oma = c(1.5, 0, 2.4, 0))
     for (distribution in distributions) for (metric in c("FDP", "TDP")) {
       z <- summary[summary$example == panels$example[k] & summary$T == panels$T[k] &
                      summary$distribution == distribution, , drop = FALSE]
