@@ -73,20 +73,58 @@ ref <- stats::lm.fit(cbind(1, make_tv_design(design$factors, 0L, 2L)$Z),
   t(sweep(data$returns[design$rows, design$train, drop = FALSE], 2L, data$rf[design$train], "-")))
 stopifnot(near(t(ref$fitted.values) - design$original_alpha, design$null_mean))
 
+# The empirical entry points must use the same ordinary bootstrap as ccy_bh().
+# Reconstruct a formation panel and a calibration draw independently of their
+# selection workers, then compare the reported decisions and performance counts.
+local({
+  on.exit(assign(".Random.seed", seed, envir = .GlobalEnv))
+  rolling <- reproduce_empirical(data, lookbacks = 100L, holding = 20L,
+    methods = "CCY-BH", cores = 1L, benchmarks = "FF4", sensitivity = FALSE,
+    ccy_B = 99L, ccy_seed = 87231L)
+  task <- rolling$task_schedule[1L, ]
+  train <- seq.int(task$train_first, task$train_last)
+  eligible <- which(rowSums(!data$observed[, train, drop = FALSE]) == 0L)
+  Y <- sweep(data$returns[eligible, train, drop = FALSE], 2L, data$rf[train], "-")
+  direct <- ccy_bh(Y, data$factors[train, , drop = FALSE], B = 99L,
+    seed = 87231L + 2029L * task$task_id, cores = 1L)
+  scores <- rolling$fund_scores[rolling$fund_scores$task_id == 1L, ]
+  stopifnot(identical(scores$p_value, direct$p_values),
+    identical(scores$selected, seq_along(eligible) %in% direct$selected))
+
+  calibration <- reproduce_calibration(data, replications = 1L, cores = 1L,
+    lookbacks = 100L, train_end = 120L, shifts = c(0, .004),
+    methods = "CCY-BH", signal_fraction = .2, knot_candidates = 0L,
+    ccy_B = 99L, ccy_seed = 87231L)
+  for (i in seq_len(nrow(calibration$job_schedule))) {
+    job <- calibration$job_schedule[i, ]
+    d <- calibration$calibrated_designs[[job$design]]
+    panel <- TVFundSelect:::.emp_calibration_draw(d, job$shift, job$replication,
+      calibration$config)
+    fit <- ccy_bh(panel$Y, d$factors, B = 99L, cores = 1L,
+      seed = 87231L + d$L * 10000L + job$replication)
+    m <- calibration$replication_metrics[i, ]
+    stopifnot(m$R == length(fit$selected),
+      m$V == sum(panel$delta[fit$selected] <= 0),
+      m$S == sum(panel$delta[fit$selected] > 0))
+  }
+})
+
 must_error(reproduce_empirical(data, lookbacks = 121L, cores = 1L))
 must_error(reproduce_calibration(data, train_end = 121L, cores = 1L))
 must_error(portfolio_alpha(y, F, hac_lag = TT))
 if (identical(Sys.getenv("TVFUNDSELECT_TEST_PARALLEL"), "true")) {
-  reference <- reproduce_empirical(data, lookbacks = 60L, holding = 2L, knot_candidates = 0L,
-    cores = 1L, benchmarks = "FF4", sensitivity = FALSE)
-  parallel_fit <- reproduce_empirical(data, lookbacks = 60L, holding = 2L, knot_candidates = 0L,
-    cores = 25L, benchmarks = "FF4", sensitivity = FALSE)
+  reference <- reproduce_empirical(data, lookbacks = c(100L, 101L, 102L), holding = 2L, knot_candidates = 0L,
+    cores = 1L, benchmarks = "FF4", sensitivity = FALSE,
+    methods = c("TV-SS-BH", "TV-LS-BH", "CCY-BH"), ccy_B = 99L)
+  parallel_fit <- reproduce_empirical(data, lookbacks = c(100L, 101L, 102L), holding = 2L, knot_candidates = 0L,
+    cores = 25L, benchmarks = "FF4", sensitivity = FALSE,
+    methods = c("TV-SS-BH", "TV-LS-BH", "CCY-BH"), ccy_B = 99L)
   stopifnot(identical(reference$fund_scores, parallel_fit$fund_scores),
     identical(reference$monthly_returns, parallel_fit$monthly_returns),
     identical(reference$strategy_alpha, parallel_fit$strategy_alpha), identical(.Random.seed, seed))
-  cal_args <- list(data = data, replications = 13L, lookbacks = 60L, train_end = 100L,
-    shifts = c(0, .004), methods = c("TV-LS-BH", "CC-LS-BH"),
-    signal_fraction = .2, knot_candidates = 0L)
+  cal_args <- list(data = data, replications = 13L, lookbacks = 100L, train_end = 120L,
+    shifts = c(0, .004), methods = c("TV-LS-BH", "CC-LS-BH", "CCY-BH"),
+    signal_fraction = .2, knot_candidates = 0L, ccy_B = 99L)
   ca <- do.call(reproduce_calibration, c(cal_args, list(cores = 1L)))
   cb <- do.call(reproduce_calibration, c(cal_args, list(cores = 25L)))
   stopifnot(identical(ca$replication_metrics, cb$replication_metrics),

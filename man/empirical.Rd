@@ -15,7 +15,7 @@ reproduce_empirical(data, lookbacks = c(120L, 180L), holding = 6L,
   knot_candidates = 0:3, degree = 2L, tolerance = 1e-6,
   max_iter = 10000L, cores = 25L, benchmarks = c("FF4", "TV-FF4"),
   hac_lags = 6L, sensitivity = TRUE, sensitivity_knots = 0:3,
-  out_dir = NULL)
+  out_dir = NULL, ccy_B = 9999L, ccy_seed = 20261027L)
 portfolio_alpha(returns, factors, rf = rep(0, length(returns)),
   benchmark = c("FF4", "TV-FF4"), hac_lag = 6L,
   n_internal = 3L, degree = 2L, spread = FALSE)
@@ -43,8 +43,9 @@ plot_empirical(x, file)
 \item{benchmarks, benchmark}{Constant-factor or centered time-varying factor evaluation regression. The historical label FF4 denotes the supplied factor matrix; supply the article's four columns for exact specifications.}
 \item{hac_lags, hac_lag}{Bartlett HAC lag(s), with no prewhitening and regression-df adjustment.}
 \item{sensitivity}{Recalculate fixed-knot rolling fits for the TV methods.}
-\item{sensitivity_knots}{Fixed interior-knot counts for Table 9 style sensitivity.}
-\item{out_dir}{Optional empty output directory for newly calculated CSVs, RDS and plot. Nonempty directories are never overwritten.}
+\item{sensitivity_knots}{Fixed interior-knot counts for optional sensitivity diagnostics.}
+\item{out_dir}{Optional empty output directory for the final summary document and plot. Nonempty directories are never overwritten.}
+\item{ccy_B, ccy_seed}{CCY bootstrap draw count and base seed. Window i uses ccy_seed + 2029*i, with one inner worker.}
 \item{returns}{Finite monthly portfolio net returns, or paired return differences if \code{spread=TRUE}.}
 \item{factors}{Finite date-by-factor matrix for economic evaluation.}
 \item{rf}{Monthly risk-free returns in decimal units.}

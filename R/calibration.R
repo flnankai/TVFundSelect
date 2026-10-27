@@ -72,7 +72,9 @@
   panel <- .emp_calibration_draw(design, job$shift, job$replication, config)
   fits <- fit_fund_methods(panel$Y, design$factors, gamma = config$gamma,
     knot_candidates = config$knot_candidates, degree = config$degree,
-    tolerance = config$tolerance, max_iter = config$max_iter, methods = config$methods)
+    tolerance = config$tolerance, max_iter = config$max_iter, methods = config$methods,
+    ccy_B = config$ccy_B, ccy_seed = config$ccy_seed + design$L * 10000L + job$replication,
+    ccy_cores = 1L)
   rows <- lapply(names(fits), function(method) {
     fit <- fits[[method]]; selected <- fit$selected; R <- length(selected)
     V <- sum(panel$delta[selected] <= 0); S <- sum(panel$delta[selected] > 0); m1 <- sum(panel$delta > 0)
@@ -96,9 +98,11 @@ reproduce_calibration <- function(data, replications = 1000L, cores = 25L,
     generators = "TV", methods = five_method_names, signal_fraction = .1,
     gamma = .1, knot_candidates = 0:3, degree = 2L, block_length = 1L,
     seed = 31019000L, truth_seed = 20261019L, tolerance = 1e-6,
-    max_iter = 10000L, out_dir = NULL) {
+    max_iter = 10000L, out_dir = NULL, ccy_B = 9999L, ccy_seed = 202610270L) {
   restore_locale <- .tf_utf8_scope(); on.exit(restore_locale(), add = TRUE)
   .emp_validate_data(data)
+  ccy_B <- .emp_integer(ccy_B, "ccy_B")
+  ccy_seed <- .emp_integer(ccy_seed, "ccy_seed", 0L)
   replications <- .emp_integer(replications, "replications"); cores <- .emp_integer(cores, "cores")
   train_end <- .emp_integer(train_end, "train_end"); block_length <- .emp_integer(block_length, "block_length")
   seed <- .emp_integer(seed, "seed", 0L); truth_seed <- .emp_integer(truth_seed, "truth_seed", 0L)
@@ -112,7 +116,8 @@ reproduce_calibration <- function(data, replications = 1000L, cores = 25L,
   if (!is.numeric(signal_fraction) || length(signal_fraction) != 1L || !is.finite(signal_fraction) ||
       signal_fraction < 0 || signal_fraction > .5) stop("signal_fraction must lie in [0,.5].")
   if (max(lookbacks) + truth_seed > .Machine$integer.max ||
-      seed + max(lookbacks) * 10000 + replications > .Machine$integer.max) stop("Seed range overflow.")
+      seed + max(lookbacks) * 10000 + replications > .Machine$integer.max ||
+      ccy_seed + max(lookbacks) * 10000 + replications > .Machine$integer.max) stop("Seed range overflow.")
   out_dir <- .emp_output_dir(out_dir)
   state <- .emp_seed_state(); on.exit(.emp_restore_seed(state), add = TRUE)
   RNGkind("Mersenne-Twister", "Inversion", "Rejection")
@@ -120,6 +125,7 @@ reproduce_calibration <- function(data, replications = 1000L, cores = 25L,
     train_end = train_end, shifts = shifts, generators = generators, methods = methods,
     signal_fraction = signal_fraction, gamma = gamma, knot_candidates = knot_candidates, degree = degree,
     block_length = block_length, seed = seed, truth_seed = truth_seed, tolerance = tolerance, max_iter = max_iter,
+    ccy_B = ccy_B, ccy_seed = ccy_seed,
     convention = "excess", residual_scaling = "sqrt(T/(T-rank(full generating design)))")
   built <- .emp_calibration_designs(data, config)
   cases <- expand.grid(design = names(built$designs), shift = shifts, stringsAsFactors = FALSE)
@@ -151,10 +157,8 @@ reproduce_calibration <- function(data, replications = 1000L, cores = 25L,
       "block_length=1 removes temporal dependence; this is not an estimate of real-data FDR."))
   class(out) <- c("fund_calibration_reproduction", "list")
   if (!is.null(out_dir)) {
-    for (nm in names(out)) if (is.data.frame(out[[nm]]))
-      utils::write.csv(out[[nm]], file.path(out_dir, paste0(nm, ".csv")), row.names = FALSE, na = "NA")
-    saveRDS(out, file.path(out_dir, "calibration_recomputed.rds"))
-    writeLines(capture.output(utils::sessionInfo()), file.path(out_dir, "sessionInfo.txt"))
+    .tf_write_summary(list(config = config, calibration_summary = summary),
+                      out_dir, "calibration_summary")
   }
   out
 }

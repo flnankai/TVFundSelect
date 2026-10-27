@@ -5,7 +5,7 @@
 \title{Recompute Individual and Panel Coefficient-Constancy Diagnostics}
 \description{Tests whether all alpha and factor-loading functions are constant,
 using the formulas and iid whole-date residual bootstrap in Appendix B of the
-October 24, 2026 manuscript. These are specification diagnostics, not tests of
+October 27, 2026 manuscript. These are specification diagnostics, not tests of
 positive average alpha or measurements of observed-fund FDR.}
 \usage{
 individual_constancy_test(y, factors, L = NULL, B = 1999L, seed = 20261020L)

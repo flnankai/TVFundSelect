@@ -12,14 +12,14 @@ F <- matrix(0.25 + rnorm(TT), ncol = 1L)
 Y <- matrix(rnorm(N * TT), N, TT) +
   outer(seq(-0.2, 0.3, length.out = N), rep(1, TT)) +
   outer(rep(1, N), F[, 1L] * (0.5 + 0.3 * sin(2 * pi * u)))
-fits <- fit_fund_methods(Y, F, knot_candidates = 1L)
+fits <- fit_fund_methods(Y, F, knot_candidates = 1L, ccy_B = 199L, ccy_cores = 1L)
 stopifnot(identical(names(fits), c("TV-SS-BH", "TV-LS-BH", "CC-SS-BH", "CC-LS-BH", "CCY-BH")))
 standalone <- list(
   `TV-SS-BH` = tv_ss_bh(Y, F, knot_candidates = 1L),
   `TV-LS-BH` = tv_ls_bh(Y, F, knot_candidates = 1L),
   `CC-SS-BH` = cc_ss_bh(Y, F),
   `CC-LS-BH` = cc_ls_bh(Y, F),
-  `CCY-BH` = ccy_bh(Y, F))
+  `CCY-BH` = ccy_bh(Y, F, B = 199L, cores = 1L))
 for (name in names(standalone)) {
   stopifnot(identical(standalone[[name]]$method, name),
             identical(standalone[[name]]$statistics, fits[[name]]$statistics),
@@ -28,12 +28,13 @@ for (name in names(standalone)) {
 }
 stopifnot(identical(standalone[["TV-LS-BH"]]$implementation_label, "TV-OLS-BH-df"),
           identical(standalone[["CC-SS-BH"]]$implementation_label, "SS-BH-constant"),
-          identical(standalone[["CCY-BH"]]$implementation_label, "CCY-BH"))
+          identical(standalone[["CCY-BH"]]$implementation_label, "CCY-RB-BH"))
 for (name in names(fits)) {
   fit <- fits[[name]]
+  if (name != "CCY-BH") stopifnot(near(fit$p_values, pnorm(fit$statistics, lower.tail = FALSE)))
+  else stopifnot(near(fit$p_values, (fit$exceedances + 1) / (fit$B + 1)), fit$resampling == "residual", fit$df_adjust)
   stopifnot(identical(fit$method, name), length(fit$p_values) == N,
             all(fit$p_values >= 0 & fit$p_values <= 1),
-            near(fit$p_values, pnorm(fit$statistics, lower.tail = FALSE)),
             identical(fit$selected, bh_select(fit$p_values)$selected))
 }
 
@@ -67,7 +68,7 @@ stopifnot(identical(ccss$calibration, "none"),
 
 # Local-linear fitted residuals and the literal T^-2 kernel variance objective.
 h <- 0.4
-local <- ccy_bh(Y, F, bandwidth = h, keep_curves = TRUE)
+local <- ccy_bh(Y, F, bandwidth = h, keep_curves = TRUE, B = 99L, cores = 1L)
 kernel <- 0.75 * pmax(1 - (outer(u, u, "-") / h)^2, 0)
 kernel <- kernel / rowSums(kernel)
 literal_var <- vapply(seq_len(N), function(i) {

@@ -49,7 +49,7 @@ source substitution. Both archive arguments can be supplied for offline use.}
 \value{A panel compatible with \code{read_fund_panel}, with an additional
 \code{acquisition} component containing URLs, source-file hashes, numeric hashes,
 transformation and vintage metadata. The three raw input CSVs and an
-\code{acquisition_provenance.rds} file are written to \code{out_dir}.}
+\code{acquisition_provenance.txt} file are written to \code{out_dir}.}
 \examples{
 \dontrun{
 data <- fetch_empirical_data("raw-inputs")

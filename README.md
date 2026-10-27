@@ -1,7 +1,7 @@
 # TVFundSelect
 
 An installable R package for **Robust Mutual Fund Selection with Time-Varying
-Alphas and Factor Loadings**, manuscript revised October 24, 2026.
+Alphas and Factor Loadings**, manuscript revised October 27, 2026. Version 0.2.0.
 
 **Reproduction means new computation.** The package generates new simulated
 panels, refits the selection methods, reconstructs empirical portfolios from
@@ -36,22 +36,35 @@ tv_robust <- tv_ss_bh(Y, F)  # proposed time-varying spatial-sign procedure
 tv_ls    <- tv_ls_bh(Y, F)  # matched spline least squares, residual-df variance
 cc_robust <- cc_ss_bh(Y, F) # constant-coefficient spatial-sign procedure
 cc_ls    <- cc_ls_bh(Y, F)  # constant least squares, residual-df variance
-local_ls <- ccy_bh(Y, F)    # local-linear average alpha plus one-sided BH
+local_ls <- ccy_bh(Y, F, B = 9999, seed = 20261027, cores = 25)
+# Ordinary residual-bootstrap p-values followed by one-sided BH
 
 all_fits <- fit_fund_methods(Y, F, gamma = .1)
 all_fits[["TV-SS-BH"]]$selected  # integer fund row indices
 all_fits[["TV-SS-BH"]]$p_values
 ```
 
-Every method returns signed statistics, one-sided normal p-values and a BH
-selection set. Both TV spline procedures use the same restricted-residual BIC
-over 0:3 interior knots and quadratic splines. Only the alpha-deviation basis
-is centered. For nuisance rank q, TV-SS uses the factor sqrt((T-q)/T) once;
-TV-LS uses unrestricted residual variance RSS/(T-q-1). CC-LS uses RSS/(T-p-1).
-The local-linear benchmark retains its printed kernel variance formula and
-normal-reference bandwidth; BH is the article's added selection step.
-These are complete implemented comparisons, not claims that each extension
-was already proposed in the cited antecedent articles.
+All methods return one-sided p-values and BH selections. The four non-CCY
+methods retain their existing formulas and normal reference tails. Both TV
+spline procedures share the restricted-residual BIC over 0:3 interior knots
+and quadratic splines. TV-SS uses its residual-df multiplier once; TV-LS uses
+RSS/(T-q-1), and CC-LS uses RSS/(T-p-1).
+
+**CCY-BH now uses the ordinary residual bootstrap.** Local-linear estimation
+retains the normal-reference bandwidth. The fitted null subtracts only the
+estimated average alpha, retaining its centered time variation and fitted
+factor loadings. The centered residual pool is scaled by sqrt(T/nu), where
+nu is the squared Frobenius norm of C(I-S). Each draw resamples whole date
+vectors with a shared date index across funds; it uses no random signs and
+no within-draw recentering. The p-value is (1 + number of bootstrap average
+alphas at least as large as the observed average alpha)/(B + 1). Estimated
+smoothing bias is retained. Normal-reference fields are diagnostic only.
+
+`ccy_bh()` always selects this ordinary, df-corrected implementation. The
+lower-level `ccy_bootstrap_bh()` additionally exposes explicitly labeled signed
+and centered diagnostics. No bootstrap procedure is asserted to guarantee BH
+FDR control under arbitrary dependence. With B=9999 the minimum p-value is
+0.0001; compare this with gamma/N for your fund universe.
 
 Input validation rejects unidentified designs, nonfinite data, zero residual
 radii and nonconvergent spatial equations. It does not silently ridge-fit,
@@ -75,9 +88,9 @@ reproduce_paper(data = raw, output_dir = "new_full_run", cores = 25)
 ```
 
 Defaults are 1,000 new replications per simulation/calibration setting and
-1,999 new draws for constancy bootstraps. Main simulations contain 216 settings
-and five fits per panel: over one million new method fits, plus a separate
-bandwidth experiment. Full runs are intentionally expensive. Choose smaller
+1,999 new draws for constancy bootstraps and 9,999 for each CCY bootstrap. Main simulations contain 216 settings
+and five fits per panel: over one million new method fits. The removed bandwidth study is not run
+by the default article workflow. Full runs are intentionally expensive. Choose smaller
 replication counts or individual components for a pilot, not for final claims.
 
 ```r
@@ -88,11 +101,17 @@ reproduce_paper(raw, output_dir = "new_empirical_only",
                 calibration_reps = 1000, bootstrap_reps = 1999, cores = 25)
 ```
 
-Existing output directories are protected. The simulation functions alone
-support explicit `resume=TRUE` for checkpoints created by THIS package with
-matching configuration, R version and implementation. Default runs do not
-reuse results. Changing worker count does not change task seeds or arithmetic.
-BLAS threads are capped at one per worker and caller RNG/thread state restored.
+Existing output directories are protected. Intermediate arrays and raw
+replication metrics stay in memory: no RDS files, checkpoint directories or
+raw replication CSVs are written. `reproduce_paper()` writes just
+`paper_summary.txt`; separate module functions write their final summary and,
+where requested, a final figure. `resume=TRUE` is unsupported because no
+checkpoints are stored. Returned R objects still contain metrics and seeds.
+
+The 25-worker outer loops use one inner CCY worker to avoid nested parallelism.
+For a single `ccy_bh()` fit, `cores=25` parallelizes bootstrap batches. Explicit
+seeds make serial and parallel p-values/selections identical. BLAS threads are
+capped at one per worker and caller RNG/thread settings are restored.
 
 ## Separate reproduction functions
 
@@ -100,16 +119,13 @@ BLAS threads are capped at one per worker and caller RNG/thread state restored.
 |---|---|---|
 | Table 1 | `paper_settings()` | Fixed factor-process parameters |
 | Figures 1-6 | `reproduce_simulations()` | New DGP panels, all five methods, FDP/TDP and MCSE |
-| Table 2, Figures D.1-D.6 | `reproduce_bandwidth()` | Independent new panels, all five bandwidths |
-| Tables 3-4, Figure 7 | `reproduce_constancy()` | Raw-history samples, individual/panel fits and null draws |
-| Table 5 | `reproduce_calibration()` | New fitted TV means/residuals, independent signed month draws, five fits |
-| Tables 6-9, Figure 8 | `reproduce_empirical()` | New rolling selections/holdings, paired and common-model HAC, knot sensitivity |
+| Tables 2-3, Figure 7 | `reproduce_constancy()` | Raw-history samples, individual/panel fits and null draws |
+| Table 4 | `reproduce_calibration()` | New fitted TV means/residuals, independent signed month draws, five fits |
+| Table 5, Figure 8 | `reproduce_empirical()` | New rolling selections/holdings, paired and common-model HAC, knot sensitivity |
 
 ```r
 sim <- reproduce_simulations(reps = 1000, cores = 25,
                              output_dir = "new_simulations")
-bw <- reproduce_bandwidth(reps = 1000, cores = 25,
-                          output_dir = "new_bandwidth")
 cc <- reproduce_constancy(raw, B = 1999, cores = 25,
                           out_dir = "new_constancy")
 cal <- reproduce_calibration(raw, replications = 1000, cores = 25,
@@ -117,11 +133,12 @@ cal <- reproduce_calibration(raw, replications = 1000, cores = 25,
 emp <- reproduce_empirical(raw, cores = 25, out_dir = "new_rolling")
 ```
 
-The full orchestrator writes component CSV/RDS results, newly computed figures,
-Table 1-9 CSVs, per-replication metrics, seeds/configuration and `sessionInfo`.
-Plots are generated only after new computations; plotting is not the replication.
-Installed command-line scripts are in `system.file("reproduce", package =
-"TVFundSelect")`. All functions have `help()` pages and runnable examples.
+The full orchestrator computes every requested component anew and collects
+the article tables in one summary document. `ccy_B` controls bootstrap draws
+in simulation, calibration, rolling-selection and paper entry points. The
+optional `reproduce_bandwidth()` is retained only for explicit diagnostics;
+it is not part of the current article targets. All functions have `help()`
+pages and runnable examples.
 
 ## Empirical inputs and economic conventions
 
@@ -168,10 +185,10 @@ and SE are annualized by multiplying monthly values by 12. Economic evaluation
 uses Bartlett HAC with lag 6 and regression-df correction; paired contrasts are
 unadjusted, two-sided tests, not one-sided selection tests.
 
-The calibration function defaults to the six TV-generator cases in Table 5:
+The calibration function defaults to the six TV-generator cases in Table 4:
 120/180-month windows ending July 2017, 0/.002/.004 imposed signals, independent
 whole-month residual draws and common random signs. Optional CC generators or
-longer residual blocks are explicit extensions, not the Table 5 default.
+longer residual blocks are explicit extensions, not the Table 4 default.
 Real observed-fund skill is unknown; no real-data FDP or TDP is reported.
 
 ## Reproducibility and uncertainty
@@ -194,7 +211,7 @@ made that packaging re-executed every 1,000-replication experiment.
 ## References and scope
 
 Methodological antecedents include Benjamini and Hochberg (1995), Ang and
-Kristensen (2012), Cai, Cheng and Yan (2018), Ma, Lan, Su and Tsai (2020),
+Kristensen (2012), Cheng, Cai and Yan (2018), Ma, Lan, Su and Tsai (2020),
 Wang, Zhao, Feng and Wang (2025), and Zhao and Wang (2026). The individual
 Ma constancy diagnostic is distinct from the unpublished panel combination
 implemented in Appendix B. FDR claims require the manuscript's assumptions;

@@ -5,7 +5,8 @@
 \alias{print.fund_simulation}
 \title{Recompute the Simulation Studies from Newly Generated Panels}
 \description{Fresh Monte Carlo calculations for the five-method comparison in
-Section 4 and the independent CCY bandwidth experiment in Appendix D. Every
+Section 4. A separate optional bandwidth diagnostic is retained for compatibility
+but is not included in the revised article or default paper workflow. Every
 task generates observations and refits the requested methods. Archived article
 summaries are not inputs to these functions.}
 \usage{
@@ -17,7 +18,8 @@ reproduce_simulations(reps = 1000L, cores = 25L, examples = 1:3,
   nonnull_fraction = 0.1, knot_candidates = 0:3, degree = 2L,
   tolerance = 1e-6, max_iter = 10000L,
   methods = c("TV-SS-BH", "TV-LS-BH", "CC-SS-BH", "CC-LS-BH", "CCY-BH"),
-  output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L)
+  output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L,
+  ccy_B = 9999L, ccy_seed = 20261027L)
 
 reproduce_bandwidth(reps = 1000L, cores = 25L, examples = 1:3,
   times = c(200L, 400L),
@@ -25,7 +27,8 @@ reproduce_bandwidth(reps = 1000L, cores = 25L, examples = 1:3,
   signals = c(0.02, 0.04, 0.06, 0.08, 0.10, 0.13, 0.175, 0.23, 0.30),
   multipliers = c(1, 2, 4, 8, 16), N = 200L, gamma = 0.1,
   seed = 1120261010L, rho = 0.5, nonnull_fraction = 0.1,
-  output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L)
+  output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L,
+  ccy_B = 9999L, ccy_seed = 20261027L)
 
 plot_simulation_results(x, file = NULL, overwrite = FALSE)
 
@@ -56,11 +59,10 @@ plot_simulation_results(x, file = NULL, overwrite = FALSE)
   calculations still take place but no files are written.}
   \item{plots}{Whether to write freshly calculated curves when
   \code{output_dir} is supplied.}
-  \item{resume}{Default \code{FALSE} refuses to reuse existing output. An
-  explicit \code{TRUE} resumes this package's own interrupted calculation only
-  after checking its complete configuration, R version and implementation
-  manifest. It does not import legacy results from the paper workspace.}
-  \item{chunk_size}{Panels per checkpoint/dispatch chunk.}
+  \item{resume}{Must be false. Intermediate checkpoints are not written or reused.}
+  \item{chunk_size}{Panels per in-memory dispatch chunk.}
+  \item{ccy_B}{CCY bootstrap draws per panel, default 9999.}
+  \item{ccy_seed}{Base CCY seed; each task uses this plus 2029 times its task ID.}
   \item{x}{A result returned by either simulation runner.}
   \item{file}{Optional PDF path; \code{NULL} draws on the current device.}
   \item{overwrite}{Whether to replace an existing figure, default false.}
@@ -87,7 +89,7 @@ never silently deleted when averaging results.
 On Windows, file-output operations temporarily use a UTF-8 character locale
 and restore the caller's exact \code{LC_CTYPE} on return or error; numeric and
 collation locales are not changed. This permits non-ASCII output directories
-and worker checkpoints even when the calling process starts in the C locale.
+and final summaries even when the calling process starts in the C locale.
 
 For selected set S, FDP counts selections with nonpositive true average alpha,
 divided by the number selected or one when empty. TDP divides true positive
@@ -97,9 +99,9 @@ drawn from frozen article CSV files.
 
 Full runs can be computationally expensive. The examples below intentionally
 request a reduced experiment; use the defaults for the paper design. The
-provided output directory stores \file{manifest.rds}, per-chunk checkpoints,
-\file{replications.csv}, \file{summary.csv}, \file{simulation.rds}, and an
-optional newly generated \file{fdp_tdp.pdf}. Results are based on independent
+provided output directory stores only \file{simulation_summary.txt} and an
+optional final \file{fdp_tdp.pdf}. Raw replication metrics and configurations
+remain available in the returned R object, not in files. Results are based on independent
 innovations across dates; this does not validate arbitrary serial dependence.
 }
 \value{The runners return an object of class \code{fund_simulation} containing

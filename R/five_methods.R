@@ -4,7 +4,8 @@ five_method_names <- c("TV-SS-BH", "TV-LS-BH", "CC-SS-BH", "CC-LS-BH", "CCY-BH")
 
 fit_five_methods <- function(Y, factors, gamma = .1, knot_candidates = 0:3,
     degree = 2L, tolerance = 1e-6, max_iter = 10000L,
-    ccy_bandwidth = NULL, methods = five_method_names) {
+    ccy_bandwidth = NULL, methods = five_method_names,
+    ccy_B = 9999L, ccy_seed = 20261027L, ccy_cores = 25L) {
   if (!is.character(methods) || !length(methods) || anyNA(methods) || anyDuplicated(methods) ||
       any(!methods %in% five_method_names)) stop("Invalid or duplicated method names.")
   fits <- list(
@@ -18,8 +19,8 @@ fit_five_methods <- function(Y, factors, gamma = .1, knot_candidates = 0:3,
       tolerance = tolerance, max_iter = max_iter),
     `CC-LS-BH` = function() cc_ls_bh(Y, factors, gamma = gamma,
       variance_estimator = "residual_df"),
-    `CCY-BH` = function() ccy_ll_bh(Y, factors, gamma = gamma,
-      bandwidth = ccy_bandwidth))
+    `CCY-BH` = function() ccy_bh(Y, factors, gamma = gamma,
+      bandwidth = ccy_bandwidth, B = ccy_B, seed = ccy_seed, cores = ccy_cores))
   out <- lapply(methods, function(name) {
     fit <- fits[[name]]()
     fit$implementation_label <- fit$implementation_label %||% fit$method

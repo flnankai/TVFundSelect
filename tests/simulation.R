@@ -1,6 +1,11 @@
 library(TVFundSelect)
 near <- function(x, y, tolerance = 1e-12) isTRUE(all.equal(x, y, tolerance = tolerance))
 must_error <- function(expr) stopifnot(inherits(tryCatch(force(expr), error = identity), "error"))
+output_files <- function(path, ...) {
+  restore <- getFromNamespace(".tf_utf8_scope", "TVFundSelect")()
+  on.exit(restore(), add = TRUE)
+  list.files(path, ...)
+}
 remove_temporary_output <- function(path) {
   restore <- getFromNamespace(".tf_utf8_scope", "TVFundSelect")()
   on.exit(restore(), add = TRUE)
@@ -38,7 +43,7 @@ set.seed(905)
 before <- .Random.seed
 settings <- list(reps = 2L, examples = 1L, times = 80L,
   distributions = c("normal", "t3"), signals = c(0.04, 0.10), N = 40L,
-  seed = 40001L, plots = FALSE, chunk_size = 1L)
+  seed = 40001L, plots = FALSE, chunk_size = 1L, ccy_B = 99L)
 serial <- do.call(reproduce_simulations, c(settings, list(cores = 1L)))
 stopifnot(identical(.Random.seed, before), nrow(serial$tasks) == 8L,
   nrow(serial$raw) == 40L, nrow(serial$summary) == 20L,
@@ -58,7 +63,8 @@ first <- serial$tasks[1L, ]
 fresh <- simulate_fund_panel(N = 40L, TT = first$T, example = first$example,
   distribution = first$distribution, signal_shift = first$signal_shift,
   seed = first$task_seed)
-fits <- fit_fund_methods(fresh$Y, fresh$factors)
+fits <- fit_fund_methods(fresh$Y, fresh$factors, ccy_B = 99L,
+  ccy_seed = serial$config$ccy_seed + 2029L * first$task_id, ccy_cores = 1L)
 for (name in names(fits)) {
   selected <- fits[[name]]$selected
   correct <- sum(fresh$delta[selected] > 0)
@@ -69,7 +75,7 @@ for (name in names(fits)) {
 
 bandwidth <- reproduce_bandwidth(reps = 2L, cores = 1L, examples = 1L,
   times = 80L, distributions = "normal", signals = 0.10, N = 40L,
-  seed = 40002L, plots = FALSE, multipliers = c(1, 2, 4, 8, 16), chunk_size = 1L)
+  seed = 40002L, plots = FALSE, multipliers = c(1, 2, 4, 8, 16), chunk_size = 1L, ccy_B = 99L)
 stopifnot(nrow(bandwidth$raw) == 10L, nrow(bandwidth$summary) == 5L,
   all(bandwidth$raw$bandwidth == bandwidth$raw$bandwidth_multiplier *
         1.06 * sd((1:80) / 80) * 80^(-1/5)))
@@ -81,11 +87,9 @@ check_output <- function() {
     distributions = "normal", signals = 0.1, N = 20L,
     methods = c("TV-LS-BH", "CC-LS-BH"), output_dir = out, plots = TRUE)
   calculated <- do.call(reproduce_simulations, arguments)
-  stopifnot(all(file.exists(file.path(out, c("manifest.rds", "replications.csv",
-    "summary.csv", "simulation.rds", "fdp_tdp.pdf")))))
+  stopifnot(identical(sort(output_files(out)), c("fdp_tdp.pdf", "simulation_summary.txt")))
   must_error(do.call(reproduce_simulations, arguments))
-  resumed <- do.call(reproduce_simulations, c(arguments, list(resume = TRUE)))
-  stopifnot(identical(calculated$raw, resumed$raw))
+  must_error(do.call(reproduce_simulations, c(arguments, list(resume = TRUE))))
   changed <- arguments
   changed$seed <- 99L
   must_error(do.call(reproduce_simulations, c(changed, list(resume = TRUE))))
@@ -99,7 +103,7 @@ if (identical(Sys.getenv("TVFUNDSELECT_PARALLEL_TESTS"), "true")) {
     identical(serial$tasks, parallel$tasks), identical(.Random.seed, before))
   bandwidth25 <- reproduce_bandwidth(reps = 2L, cores = 25L, examples = 1L,
     times = 80L, distributions = "normal", signals = 0.10, N = 40L,
-    seed = 40002L, plots = FALSE, multipliers = c(1, 2, 4, 8, 16), chunk_size = 1L)
+    seed = 40002L, plots = FALSE, multipliers = c(1, 2, 4, 8, 16), chunk_size = 1L, ccy_B = 99L)
   stopifnot(identical(bandwidth$raw, bandwidth25$raw),
     identical(bandwidth$summary, bandwidth25$summary))
   check_parallel_unicode <- function() {
@@ -109,12 +113,10 @@ if (identical(Sys.getenv("TVFUNDSELECT_PARALLEL_TESTS"), "true")) {
     p <- do.call(reproduce_simulations, c(settings, list(cores = 2L, output_dir = out)))
     stopifnot(identical(serial$raw, p$raw), identical(serial$summary, p$summary),
       identical(Sys.getlocale("LC_CTYPE"), old_locale),
-      dir.exists(p$output_dir), file.exists(file.path(p$output_dir, "summary.csv")))
-    continued <- do.call(reproduce_simulations,
-      c(settings, list(cores = 2L, output_dir = out, resume = TRUE)))
-    stopifnot(identical(p$raw, continued$raw),
-      all(file.exists(file.path(p$output_dir, "checkpoints",
-        sprintf("chunk_%09d.rds", continued$tasks$task_id)))))
+      dir.exists(p$output_dir), file.exists(file.path(p$output_dir, "simulation_summary.txt")))
+    must_error(do.call(reproduce_simulations,
+      c(settings, list(cores = 2L, output_dir = out, resume = TRUE))))
+    stopifnot(!length(output_files(out, pattern = "[.]rds$", recursive = TRUE)))
   }
   check_parallel_unicode()
 }
