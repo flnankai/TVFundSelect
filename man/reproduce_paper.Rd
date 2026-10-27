@@ -12,9 +12,9 @@ paper_settings()
 paper_targets()
 example_fund_data(N = 30L, TT = 240L, seed = 20261025L)
 reproduce_paper(data = NULL, output_dir = "paper_recomputed",
-  components = c("simulations", "bandwidth", "constancy", "calibration", "empirical"),
+  components = c("simulations", "constancy", "calibration", "empirical"),
   cores = 25L, simulation_reps = 1000L, calibration_reps = 1000L,
-  bootstrap_reps = 1999L, seed = 420261010L, quick = FALSE)
+  bootstrap_reps = 1999L, seed = 420261010L, quick = FALSE, ccy_B = 9999L)
 }
 \arguments{
 \item{data}{Raw empirical input from \code{read_fund_panel}. Required for a full
@@ -25,6 +25,7 @@ empirical run. Quick mode may create clearly labeled synthetic demonstration dat
 \item{simulation_reps}{New replications per simulation setting, default 1000.}
 \item{calibration_reps}{New replications per empirical calibration case, default 1000.}
 \item{bootstrap_reps}{New constancy bootstrap draws, default 1999.}
+\item{ccy_B}{Ordinary residual-bootstrap draws for CCY, default 9999; quick mode uses at most 99.}
 \item{seed}{Main simulation seed or synthetic demonstration seed. Other modules
 retain their documented independent article-aligned defaults.}
 \item{quick}{Use small fresh simulation/bootstrap counts and synthetic empirical
@@ -34,7 +35,7 @@ data if none is supplied. This demonstrates the software, not paper evidence.}
 }
 \details{\code{paper_targets} maps each article table and figure to its computing
 function. The full Monte Carlo defaults are deliberately expensive: 216000 main
-panels with five method fits each, a separate bandwidth experiment, and empirical
+panels with five method fits each, and empirical
 calibration and bootstrap work. Numerical failures are reported, not dropped.
 Simulation seeds produce the same statistical design but need not reproduce the
 legacy Monte Carlo table digit for digit. Use the supplied R/version/configuration
@@ -43,8 +44,9 @@ records to compare uncertainty. Raw CRSP-derived inputs are not bundled.
 they cannot reproduce the empirical tables.}
 \value{Settings and targets return a list and data frame. The demonstration
 generator returns a synthetic raw-data list. \code{reproduce_paper} invisibly
-returns all freshly computed module outputs and a manifest, and writes component
-results and Table 1--9 CSVs corresponding to the requested targets.}
+returns all freshly computed module outputs, tables and a manifest in memory,
+and writes one consolidated paper_summary.txt document. The removed bandwidth
+study is not part of the default workflow.}
 \examples{
 paper_targets()
 x <- example_fund_data(N = 12, TT = 120)

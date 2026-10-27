@@ -77,13 +77,23 @@
   invisible(out_dir)
 }
 
+.tf_write_summary <- function(result, out_dir, stem) {
+  if (is.null(out_dir)) return(invisible(NULL))
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  sections <- lapply(names(result), function(nm) {
+    value <- result[[nm]]
+    c(nm, if (is.data.frame(value)) capture.output(print(value, row.names = FALSE))
+      else capture.output(dput(value)), "")
+  })
+  writeLines(unlist(sections, use.names = FALSE), file.path(out_dir, paste0(stem, ".txt")))
+  invisible(out_dir)
+}
+
 .tf_save_tables <- function(result, out_dir, stem) {
   if (is.null(out_dir)) return(invisible(NULL))
   .tf_output_dir(out_dir)
-  saveRDS(result, file.path(out_dir, paste0(stem, ".rds")))
-  for (nm in names(result)) if (is.data.frame(result[[nm]])) {
-    utils::write.csv(result[[nm]], file.path(out_dir, paste0(nm, ".csv")), row.names = FALSE)
-  }
-  writeLines(capture.output(utils::sessionInfo()), file.path(out_dir, "sessionInfo.txt"))
+  keep <- vapply(result, is.data.frame, logical(1))
+  keep[names(keep) %in% c("raw", "replication_metrics", "tasks", "job_schedule", "task_schedule")] <- FALSE
+  .tf_write_summary(c(result[c("config")], result[keep]), out_dir, stem)
   invisible(out_dir)
 }

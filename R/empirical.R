@@ -129,7 +129,8 @@ read_fund_panel <- function(fund_file, factor_file, rf_file, start_date = "1987-
   F <- data$factors[train, , drop = FALSE]
   fits <- fit_fund_methods(Y, F, gamma = config$gamma, knot_candidates = config$knot_candidates,
     degree = config$degree, tolerance = config$tolerance, max_iter = config$max_iter,
-    methods = config$methods)
+    methods = config$methods, ccy_B = config$ccy_B,
+    ccy_seed = config$ccy_seed + 2029L * task$task_id, ccy_cores = 1L)
   monthly <- windows <- scores <- sensitivity <- list()
   for (method in names(fits)) {
     fit <- fits[[method]]; selected <- eligible[fit$selected]
@@ -151,7 +152,8 @@ read_fund_panel <- function(fund_file, factor_file, rf_file, start_date = "1987-
       for (nk in config$sensitivity_knots) {
         alternate <- fit_fund_methods(Y, F, gamma = config$gamma, knot_candidates = nk,
           degree = config$degree, tolerance = config$tolerance, max_iter = config$max_iter,
-          methods = method)[[1L]]
+          methods = method, ccy_B = config$ccy_B,
+          ccy_seed = config$ccy_seed + 2029L * task$task_id, ccy_cores = 1L)[[1L]]
         alt <- eligible[alternate$selected]; u <- union(selected, alt)
         sensitivity[[length(sensitivity) + 1L]] <- cbind(key, knots = nk,
           n_selected = length(alt), baseline_selected = length(selected),
@@ -204,9 +206,11 @@ reproduce_empirical <- function(data, lookbacks = c(120L, 180L), holding = 6L,
     methods = c("TV-SS-BH", "TV-LS-BH"), gamma = .1, knot_candidates = 0:3,
     degree = 2L, tolerance = 1e-6, max_iter = 10000L, cores = 25L,
     benchmarks = c("FF4", "TV-FF4"), hac_lags = 6L, sensitivity = TRUE,
-    sensitivity_knots = 0:3, out_dir = NULL) {
+    sensitivity_knots = 0:3, out_dir = NULL, ccy_B = 9999L, ccy_seed = 20261027L) {
   restore_locale <- .tf_utf8_scope(); on.exit(restore_locale(), add = TRUE)
   .emp_validate_data(data)
+  ccy_B <- .emp_integer(ccy_B, "ccy_B")
+  ccy_seed <- .emp_integer(ccy_seed, "ccy_seed", 0L)
   holding <- .emp_integer(holding, "holding")
   cores <- .emp_integer(cores, "cores")
   if (!length(lookbacks) || any(!is.finite(lookbacks)) || any(lookbacks != floor(lookbacks)) ||
@@ -228,9 +232,11 @@ reproduce_empirical <- function(data, lookbacks = c(120L, 180L), holding = 6L,
     }
   }
   tasks <- do.call(rbind, tasks); tasks$task_id <- seq_len(nrow(tasks))
+  if (as.double(ccy_seed) + 2029 * nrow(tasks) > .Machine$integer.max) stop("CCY seed overflow.")
   config <- list(gamma = gamma, knot_candidates = knot_candidates, degree = degree,
     tolerance = tolerance, max_iter = max_iter, methods = methods, sensitivity = sensitivity,
     sensitivity_knots = sensitivity_knots, lookbacks = lookbacks, holding = holding,
+    ccy_B = ccy_B, ccy_seed = ccy_seed,
     convention = "excess", benchmarks = benchmarks, hac_lags = hac_lags, cores = cores)
   runs <- .emp_map(seq_len(nrow(tasks)), .emp_window_worker, cores, tasks = tasks, data = data, config = config)
   monthly <- do.call(rbind, lapply(runs, `[[`, "monthly"))
@@ -286,11 +292,9 @@ reproduce_empirical <- function(data, lookbacks = c(120L, 180L), holding = 6L,
     interpretation = "Real fund truth is unknown; no empirical FDP/TDP is reported.")
   class(out) <- c("fund_empirical_reproduction", "list")
   if (!is.null(out_dir)) {
-    for (nm in names(out)) if (is.data.frame(out[[nm]]))
-      utils::write.csv(out[[nm]], file.path(out_dir, paste0(nm, ".csv")), row.names = FALSE, na = "NA")
-    saveRDS(out, file.path(out_dir, "empirical_recomputed.rds"))
+    .tf_write_summary(out[c("config", "performance_summary", "strategy_alpha",
+                            "paired_alpha", "sensitivity_summary")], out_dir, "empirical_summary")
     plot_empirical(out, file.path(out_dir, "rolling_selection.pdf"))
-    writeLines(capture.output(utils::sessionInfo()), file.path(out_dir, "sessionInfo.txt"))
   }
   out
 }

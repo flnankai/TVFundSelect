@@ -1,4 +1,4 @@
-# Fresh computation of the six Table 5 cases: fitted TV mean + independent
+# Fresh computation of the six Table 4 cases: fitted TV mean + independent
 # sign-symmetrized whole residual-month resampling. No stored results are inputs.
 # Usage: Rscript 05_calibration.R INPUT_DIRECTORY OUTPUT_DIRECTORY [REPS] [CORES]
 library(TVFundSelect)

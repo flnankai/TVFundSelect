@@ -98,13 +98,15 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
       fits <- fit_fund_methods(panel$Y, panel$factors, gamma = config$gamma,
         knot_candidates = config$knot_candidates, degree = config$degree,
         tolerance = config$tolerance, max_iter = config$max_iter,
-        methods = config$methods)
+        methods = config$methods, ccy_B = config$ccy_B,
+        ccy_seed = config$ccy_seed + 2029L * task$task_id, ccy_cores = 1L)
       rows <- lapply(names(fits), function(name) score_fit(fits[[name]], name))
     } else {
       h0 <- 1.06 * stats::sd(seq_len(task$T) / task$T) * task$T^(-1/5)
       rows <- lapply(config$multipliers, function(multiplier) {
         fit <- ccy_bh(panel$Y, panel$factors, gamma = config$gamma,
-                      bandwidth = multiplier * h0)
+                      bandwidth = multiplier * h0, B = config$ccy_B,
+                      seed = config$ccy_seed + 2029L * task$task_id, cores = 1L)
         score_fit(fit, "CCY-BH", multiplier)
       })
     }
@@ -116,25 +118,10 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
 }
 
 .tfsim_chunk <- function(indices, grid, config, output_dir, resume) {
-  chunk_id <- as.integer(indices[1L])
-  path <- if (is.null(output_dir)) NULL else file.path(output_dir, "checkpoints",
-    sprintf("chunk_%09d.rds", chunk_id))
-  if (!is.null(path) && file.exists(path)) {
-    if (!resume) stop("Refusing to overwrite a completed simulation chunk.", call. = FALSE)
-    saved <- readRDS(path)
-    if (!identical(saved$task_ids, grid$task_id[indices])) {
-      stop("Checkpoint task indices do not match this run.", call. = FALSE)
-    }
-    return(saved$raw)
-  }
   raw <- do.call(rbind, lapply(indices, function(i) {
     .tfsim_one_task(grid[i, , drop = FALSE], config)
   }))
-  if (!is.null(path)) {
-    temporary <- paste0(path, ".", Sys.getpid(), ".tmp")
-    saveRDS(list(task_ids = grid$task_id[indices], raw = raw), temporary)
-    if (!file.rename(temporary, path)) stop("Could not commit simulation checkpoint.")
-  }
+
   raw
 }
 
@@ -170,28 +157,19 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
   if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   if (!dir.exists(output_dir)) stop("Cannot create output_dir.", call. = FALSE)
   output_dir <- normalizePath(output_dir, winslash = "/", mustWork = TRUE)
-  manifest_path <- file.path(output_dir, "manifest.rds")
-  if (file.exists(manifest_path)) {
-    if (!resume) stop("Output already contains a run; choose a fresh output_dir or explicitly resume it.")
-    if (!identical(readRDS(manifest_path), manifest)) {
-      stop("Stored configuration, R version or package implementation differs; choose a fresh output_dir.")
-    }
-  } else {
-    if (length(list.files(output_dir, all.files = TRUE, no.. = TRUE))) {
-      stop("Refusing to write into a nonempty directory without a matching manifest.")
-    }
-    saveRDS(manifest, manifest_path)
-  }
-  dir.create(file.path(output_dir, "checkpoints"), showWarnings = FALSE)
+  if (resume) stop("Checkpoint files are disabled; start a fresh run.")
+  if (length(list.files(output_dir, all.files = TRUE, no.. = TRUE)))
+    stop("Output directory must be empty; only final summaries will be saved.")
+
   output_dir
 }
 
 .tfsim_implementation <- function() {
   names <- c("simulate_tv_fund_panel", "simulate_reference_errors", "simulate_reference_factors",
     "simulate_reference_beta", "make_alpha_paths", "generate_average_alphas", "fit_fund_methods",
-    "tv_ss_bh", "tv_ols_bh", "ss_bh_constant", "cc_ls_bh", "ccy_ll_bh", ".tfsim_one_task")
+    "tv_ss_bh", "tv_ols_bh", "ss_bh_constant", "cc_ls_bh", "ccy_bh", "ccy_bootstrap_bh", "ccy_ll_design", ".ccy_boot_batch", ".tfsim_one_task")
   # Keep literal algorithm text in the manifest: no external hash package or
-  # machine-specific source path is needed to reject stale checkpoints.
+  # machine-specific source path is needed to identify the implementation.
   stats::setNames(lapply(names, function(name) {
     paste(deparse(get(name, envir = environment(.tfsim_implementation))), collapse = "\n")
   }), names)
@@ -199,7 +177,7 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
 
 .tfsim_run <- function(reps, cores, examples, times, distributions, signals, N, gamma,
     seed, rho, nonnull_fraction, knot_candidates, degree, tolerance, max_iter,
-    methods, multipliers, experiment, output_dir, plots, resume, chunk_size) {
+    methods, multipliers, experiment, output_dir, plots, resume, chunk_size, ccy_B, ccy_seed) {
   restore_locale <- .tf_utf8_scope()
   on.exit(restore_locale(), add = TRUE)
   reps <- .tfsim_integer(reps, "reps")
@@ -207,6 +185,8 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
   chunk_size <- .tfsim_integer(chunk_size, "chunk_size")
   N <- .tfsim_integer(N, "N", 10L)
   seed <- .tfsim_integer(seed, "seed", 0L)
+  ccy_B <- .tfsim_integer(ccy_B, "ccy_B")
+  ccy_seed <- .tfsim_integer(ccy_seed, "ccy_seed", 0L)
   degree <- .tfsim_integer(degree, "degree", 1L)
   max_iter <- .tfsim_integer(max_iter, "max_iter")
   if (!is.numeric(examples) || !length(examples) || anyNA(examples) ||
@@ -249,6 +229,7 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
   if (as.double(seed) + 1009 * nrow(grid) > .Machine$integer.max) {
     stop("The task seed schedule exceeds R's integer range; use a smaller seed or task grid.")
   }
+  if (as.double(ccy_seed) + 2029 * nrow(grid) > .Machine$integer.max) stop("CCY seed overflow.")
   grid$task_id <- seq_len(nrow(grid))
   grid$task_seed <- as.integer(seed + 1009 * grid$task_id)
   config <- list(experiment = experiment, reps = reps, examples = as.integer(examples),
@@ -258,7 +239,8 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
     max_iter = max_iter, methods = methods, multipliers = multipliers,
     chunk_size = chunk_size, seed_rule = "Mersenne-Twister/Inversion/Rejection; seed+1009*task_id",
     source = "TV_SS_BH_FDR_appendix_revised_20261024, Section 4 and Appendix D",
-    fresh_computation = TRUE)
+    fresh_computation = TRUE, ccy_B = ccy_B, ccy_seed = ccy_seed,
+    ccy_inference = "ordinary residual bootstrap; plus-one p-values; residual df correction")
   version <- tryCatch(as.character(utils::packageVersion("TVFundSelect")), error = function(e) "development")
   manifest <- list(config = config, R_version = R.version.string,
     package_version = version, implementation = .tfsim_implementation())
@@ -313,9 +295,7 @@ simulate_fund_panel <- function(N = 200L, TT = 200L, example = 3L,
   result <- structure(list(raw = raw, summary = summary, tasks = grid, config = config,
     cores = cores, manifest = manifest, output_dir = output_dir), class = "fund_simulation")
   if (!is.null(output_dir)) {
-    utils::write.csv(raw, file.path(output_dir, "replications.csv"), row.names = FALSE)
-    utils::write.csv(summary, file.path(output_dir, "summary.csv"), row.names = FALSE)
-    saveRDS(result, file.path(output_dir, "simulation.rds"))
+    .tf_write_summary(list(config = config, summary = summary), output_dir, "simulation_summary")
     if (plots) plot_simulation_results(result, file = file.path(output_dir, "fdp_tdp.pdf"),
                                        overwrite = resume)
   }
@@ -331,10 +311,11 @@ reproduce_simulations <- function(reps = 1000L, cores = 25L, examples = 1:3,
     nonnull_fraction = 0.1, knot_candidates = 0:3, degree = 2L,
     tolerance = 1e-6, max_iter = 10000L,
     methods = c("TV-SS-BH", "TV-LS-BH", "CC-SS-BH", "CC-LS-BH", "CCY-BH"),
-    output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L) {
+    output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L,
+    ccy_B = 9999L, ccy_seed = 20261027L) {
   .tfsim_run(reps, cores, examples, times, distributions, signals, N, gamma,
     seed, rho, nonnull_fraction, knot_candidates, degree, tolerance, max_iter,
-    methods, 1, "main", output_dir, plots, resume, chunk_size)
+    methods, 1, "main", output_dir, plots, resume, chunk_size, ccy_B, ccy_seed)
 }
 
 #' Recompute the CCY-BH bandwidth sensitivity study
@@ -344,10 +325,11 @@ reproduce_bandwidth <- function(reps = 1000L, cores = 25L, examples = 1:3,
     signals = c(0.02, 0.04, 0.06, 0.08, 0.10, 0.13, 0.175, 0.23, 0.30),
     multipliers = c(1, 2, 4, 8, 16), N = 200L, gamma = 0.1,
     seed = 1120261010L, rho = 0.5, nonnull_fraction = 0.1,
-    output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L) {
+    output_dir = NULL, plots = TRUE, resume = FALSE, chunk_size = 20L,
+    ccy_B = 9999L, ccy_seed = 20261027L) {
   .tfsim_run(reps, cores, examples, times, distributions, signals, N, gamma,
     seed, rho, nonnull_fraction, 0:3, 2L, 1e-6, 10000L,
-    "CCY-BH", multipliers, "bandwidth", output_dir, plots, resume, chunk_size)
+    "CCY-BH", multipliers, "bandwidth", output_dir, plots, resume, chunk_size, ccy_B, ccy_seed)
 }
 
 print.fund_simulation <- function(x, ...) {

@@ -146,7 +146,7 @@ fetch_empirical_data <- function(out_dir, author_archive = NULL, rf_archive = NU
     rf_vintage = "French July 2018 data cut (August 2018 update)",
     transformation = "R[301:668,] transposed; F[301:668,]; all726 funds; RF198702--201709",
     rights = "Downloaded directly from original public sources. Users remain responsible for source permissions; the package does not redistribute fund returns.")
-  saveRDS(panel$acquisition, file.path(out_dir, "acquisition_provenance.rds"))
+  writeLines(capture.output(dput(panel$acquisition)), file.path(out_dir, "acquisition_provenance.txt"))
   if (!quiet) message("Raw inputs acquired; no model or result cache was read. Numeric checksums verified: ",
                        panel$acquisition$numeric_verified)
   panel

@@ -27,4 +27,4 @@ jobs:
       - name: Build
         run: R CMD build .
       - name: Check
-        run: R CMD check --no-manual TVFundSelect_0.1.0.tar.gz
+        run: R CMD check --no-manual TVFundSelect_0.2.0.tar.gz

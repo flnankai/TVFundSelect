@@ -28,12 +28,14 @@ cc_ls_bh(Y, factors, gamma = 0.1,
   variance_estimator = c("residual_df", "paper"))
 
 ccy_bh(Y, factors, gamma = 0.1, bandwidth = NULL,
-  keep_curves = FALSE)
+  keep_curves = FALSE, B = 9999L, seed = 20261027L, cores = 25L,
+  batch_size = 500L, keep_bootstrap = FALSE, keep_resamples = FALSE)
 
 fit_fund_methods(Y, factors, gamma = 0.1,
   knot_candidates = 0:3, degree = 2L, tolerance = 1e-6,
   max_iter = 10000L, ccy_bandwidth = NULL,
-  methods = c("TV-SS-BH", "TV-LS-BH", "CC-SS-BH", "CC-LS-BH", "CCY-BH"))
+  methods = c("TV-SS-BH", "TV-LS-BH", "CC-SS-BH", "CC-LS-BH", "CCY-BH"),
+  ccy_B = 9999L, ccy_seed = 20261027L, ccy_cores = 25L)
 }
 \arguments{
 \item{Y}{Finite numeric \eqn{N\times T} matrix of excess returns. Funds are
@@ -55,8 +57,12 @@ residual degrees of freedom. \code{"paper"} uses RSS/T and is not the paper's
 primary CC-LS-BH comparator.}
 \item{bandwidth, ccy_bandwidth}{Positive local-linear bandwidth on normalized time.
 \code{NULL} uses \eqn{1.06\,\mathrm{sd}(t/T)T^{-1/5}} with sample SD.}
-\item{keep_curves}{Whether the local-linear result retains fitted coefficient
-and return curves and residuals.}
+\item{keep_curves}{Retain fitted alpha curves and residuals in memory.}
+\item{B, ccy_B}{Number of bootstrap draws for CCY, default 9999.}
+\item{seed, ccy_seed}{Reproducible bootstrap seed; caller RNG state is restored.}
+\item{cores, ccy_cores}{PSOCK workers for one CCY fit, default 25. Outer parallel workflows use one internally.}
+\item{batch_size}{Bootstrap draws per in-memory batch.}
+\item{keep_bootstrap, keep_resamples}{Retain bootstrap statistics or date indices in the returned object, never on disk.}
 \item{methods}{A nonempty, nonduplicated subset of the five canonical labels.}
 }
 \details{
@@ -75,13 +81,15 @@ It requires at least two funds. CC-SS-BH uses the original constant-coefficient
 spatial-sign normalization, without an additional time-varying df multiplier.
 
 TV-LS-BH estimates the full regression on \code{[1,Z]} and divides unrestricted
-RSS by \eqn{T-q-1}. CC-LS-BH analogously uses \eqn{T-p-1}. All five procedures
-use upper standard-normal tail probabilities, not finite-sample Student-t tails.
-The local-linear CCY-BH comparator uses the kernel-average residual variance
-specified in the paper; the BH step is the present paper's addition to that
-estimation approach. These comparators are not claimed as unchanged procedures
-from their cited source papers. A df correction alone does not guarantee FDR
-control under arbitrary serial or cross-sectional dependence.
+RSS by \eqn{T-q-1}. CC-LS-BH analogously uses \eqn{T-p-1}.
+The four non-CCY methods use upper standard-normal tails. CCY-BH instead uses
+the ordinary residual-bootstrap tail probability described in
+\code{\link{ccy_bootstrap_bh}}, with residual degrees-of-freedom correction.
+Its public \code{statistics} are unstudentized average alphas; normal statistics
+and standard errors are diagnostic fields only and do not enter its BH rule.
+The bootstrap extension is specified by this package and the revised manuscript;
+it is not attributed as an unchanged testing procedure to Cheng, Cai and Yan.
+Bootstrap calibration alone does not prove BH FDR control under arbitrary dependence.
 }
 \value{
 Each individual method returns a list including \code{method}, integer row indices
@@ -99,7 +107,7 @@ Wang, H., Zhao, P., Feng, L. and Wang, Z. (2025).
 Robust mutual fund selection with false discovery rate control.
 \emph{Journal of Econometrics}, 252, 106121.
 
-Cai, B., Cheng, T. and Yan, C. (2018).
+Cheng, T., Cai, B. and Yan, C. (2018).
 Time-varying skills (versus luck) in U.S. active mutual funds and hedge funds.
 \emph{Journal of Empirical Finance}, 49, 81--106.
 

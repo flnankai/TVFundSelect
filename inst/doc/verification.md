@@ -1,4 +1,16 @@
-# Verification scope (2026-10-25)
+# Verification scope
+
+## Version 0.2.0 (2026-10-27)
+
+The bootstrap suite independently refits every local regression on synthetic
+pseudo-panels and checks null-alpha paths, residual df, inclusive plus-one tails,
+BH, seed preservation and parallel equivalence. Public-method and reproduction
+tests check routing to the ordinary bootstrap and final-summary-only output.
+All intermediate metrics stay in memory; checkpoint resumption is disabled.
+The other four selection formulas are unchanged. No full Monte Carlo rerun is
+claimed as part of packaging this release.
+
+## Historical validation of version 0.1.0 (2026-10-25)
 
 The checks below are implementation checks, not a claim that every full Monte
 Carlo experiment was re-executed while building the package. Reproduction APIs
